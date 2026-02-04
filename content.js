@@ -72,6 +72,71 @@
     }, 100);
   }
 
+  // Function to execute retweet/unretweet action
+  function executeQuickRetweet(tweet, button) {
+    button.disabled = true;
+    button.textContent = '⏳';
+
+    // Detect current retweet state from the native button
+    const retweetBtn = tweet.querySelector('[data-testid="retweet"]');
+    const unretweetBtn = tweet.querySelector('[data-testid="unretweet"]');
+    const nativeBtn = retweetBtn || unretweetBtn;
+    const isRetweeted = !!unretweetBtn;
+
+    if (!nativeBtn) {
+      button.disabled = false;
+      button.textContent = '🔁';
+      return;
+    }
+
+    // Click the native retweet/unretweet button to open the menu
+    nativeBtn.click();
+
+    setTimeout(() => {
+      // Find the dropdown menu that appears
+      const menuItems = document.querySelectorAll('[role="menuitem"]');
+      let targetItem = null;
+
+      for (const item of menuItems) {
+        const text = item.textContent.toLowerCase();
+        if (isRetweeted && (text.includes('undo repost') || text.includes('undo retweet'))) {
+          targetItem = item;
+          break;
+        }
+        if (!isRetweeted && (text.includes('repost') || text.includes('retweet')) && !text.includes('quote') && !text.includes('undo')) {
+          targetItem = item;
+          break;
+        }
+      }
+
+      if (targetItem) {
+        targetItem.click();
+        if (isRetweeted) {
+          button.textContent = '🔁';
+          button.style.color = 'rgb(113, 118, 123)';
+          button.style.backgroundColor = 'transparent';
+        } else {
+          button.textContent = '🔁';
+          button.style.color = '#00ba7c';
+          button.style.backgroundColor = 'transparent';
+        }
+        button.disabled = false;
+      } else {
+        // Menu didn't open or option not found, close by pressing Escape
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        button.disabled = false;
+        updateRetweetButtonState(tweet, button);
+      }
+    }, 150);
+  }
+
+  // Update retweet button appearance based on current state
+  function updateRetweetButtonState(tweet, button) {
+    const isRetweeted = !!tweet.querySelector('[data-testid="unretweet"]');
+    button.textContent = '🔁';
+    button.style.color = isRetweeted ? '#00ba7c' : 'rgb(113, 118, 123)';
+  }
+
   // Function to add quick block button to a tweet
   function addQuickBlockButton(tweet) {
     // Check if we already added the button
@@ -135,11 +200,63 @@
     actionBar.appendChild(blockButton);
   }
 
+  // Function to add quick retweet button to a tweet
+  function addQuickRetweetButton(tweet) {
+    if (tweet.querySelector('.quick-retweet-btn')) {
+      return;
+    }
+
+    const actionBar = tweet.querySelector('[role="group"]');
+    if (!actionBar) return;
+
+    const isRetweeted = !!tweet.querySelector('[data-testid="unretweet"]');
+
+    const retweetButton = document.createElement('button');
+    retweetButton.className = 'quick-retweet-btn';
+    retweetButton.textContent = '🔁';
+    retweetButton.title = isRetweeted ? 'Quick Undo Retweet' : 'Quick Retweet';
+
+    Object.assign(retweetButton.style, {
+      backgroundColor: 'transparent',
+      color: isRetweeted ? '#00ba7c' : 'rgb(113, 118, 123)',
+      border: 'none',
+      borderRadius: '9999px',
+      padding: '0',
+      width: '34.75px',
+      height: '34.75px',
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontSize: '15px',
+      cursor: 'pointer',
+      transition: 'background-color 0.2s'
+    });
+
+    retweetButton.addEventListener('mouseenter', () => {
+      retweetButton.style.backgroundColor = 'rgba(0, 186, 124, 0.1)';
+    });
+
+    retweetButton.addEventListener('mouseleave', () => {
+      if (!retweetButton.disabled) {
+        retweetButton.style.backgroundColor = 'transparent';
+      }
+    });
+
+    retweetButton.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      executeQuickRetweet(tweet, retweetButton);
+    });
+
+    actionBar.appendChild(retweetButton);
+  }
+
   // Function to process all tweets on the page
   function processTweets() {
     const tweets = document.querySelectorAll('article[data-testid="tweet"]');
     tweets.forEach(tweet => {
       addQuickBlockButton(tweet);
+      addQuickRetweetButton(tweet);
     });
   }
 
