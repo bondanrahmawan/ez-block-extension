@@ -1,6 +1,6 @@
-// Reddit Quick Block - Content Script v2
+// Reddit Quick Block - Content Script
 // Supports: shreddit (new Reddit web components) + old Reddit layout
-// Uses shadow DOM piercing and the `author` attribute on shreddit elements
+// Adds a one-click block button next to Reddit usernames using Reddit's internal API
 
 (function () {
     'use strict';
@@ -61,6 +61,7 @@
             button.style.color = '#00ba7c';
             button.title = `Blocked u/${username}`;
             console.log(`[QuickBlock] Blocked u/${username}`);
+
         } catch (err) {
             console.error('[QuickBlock] Error:', err);
             button.disabled = false;
@@ -82,7 +83,7 @@
         btn.setAttribute('data-qb-user', username);
 
         Object.assign(btn.style, {
-            all: 'unset',           // reset inherited shadow-DOM styles
+            all: 'unset',
             cursor: 'pointer',
             fontSize: '11px',
             padding: '0 3px',
@@ -120,27 +121,24 @@
         return !SKIP.has(l) && !l.startsWith('[');
     }
 
-    function alreadyInjected(el, username) {
-        // Check if a block button for this user already exists right after
+    function alreadyInjected(el) {
         const next = el.nextElementSibling;
         return next && next.classList.contains('reddit-quick-block-btn');
     }
 
-    // Try to find author link in a root (document or shadowRoot)
     function findAuthorLink(root, username) {
         return root.querySelector(
             `a[href*="/user/${username}"], a[href*="/u/${username}/"]`
         );
     }
 
-    // Inject button after a link, handling shadow DOM
     function injectAfterLink(link, username) {
-        if (alreadyInjected(link, username)) return;
+        if (alreadyInjected(link)) return;
         link.insertAdjacentElement('afterend', makeButton(username));
     }
 
     // --------------------------------------------------------------------------
-    // shreddit-comment processing (new Reddit web component)
+    // shreddit-comment processing
     // --------------------------------------------------------------------------
 
     function processShredditComments() {
@@ -149,26 +147,25 @@
             const username = el.getAttribute('author');
             if (!isValid(username)) return;
 
-            // 1️⃣ Light DOM search
+            // 1️⃣ Light DOM
             let link = findAuthorLink(el, username);
             if (link) { injectAfterLink(link, username); return; }
 
-            // 2️⃣ Shadow DOM search
+            // 2️⃣ Shadow DOM
             if (el.shadowRoot) {
                 link = findAuthorLink(el.shadowRoot, username);
                 if (link) { injectAfterLink(link, username); return; }
 
-                // 3️⃣ Shadow DOM fallback: inject into the comment meta bar
-                const metaSlot =
-                    el.shadowRoot.querySelector('[part*="author"], [part*="meta"], [class*="author"], [class*="byline"]') ||
-                    el.shadowRoot.querySelector('header');
+                const metaSlot = el.shadowRoot.querySelector(
+                    '[part*="author"], [part*="meta"], [class*="author"], [class*="byline"], header'
+                );
                 if (metaSlot && !metaSlot.querySelector('.reddit-quick-block-btn')) {
                     metaSlot.appendChild(makeButton(username));
                     return;
                 }
             }
 
-            // 4️⃣ Absolute fallback: prepend to first named slot / the element itself
+            // 3️⃣ Fallback: top of element
             const slot = el.querySelector('[slot="authorFlair"], [slot="commentMeta"]') || el;
             if (!slot.querySelector('.reddit-quick-block-btn')) {
                 slot.prepend(makeButton(username));
@@ -177,7 +174,7 @@
     }
 
     // --------------------------------------------------------------------------
-    // shreddit-post processing (new Reddit web component)
+    // shreddit-post processing
     // --------------------------------------------------------------------------
 
     function processShredditPosts() {
@@ -195,16 +192,16 @@
                 link = findAuthorLink(el.shadowRoot, username);
                 if (link) { injectAfterLink(link, username); return; }
 
-                const metaSlot =
-                    el.shadowRoot.querySelector('[part*="author"], [part*="meta"], [class*="author"]') ||
-                    el.shadowRoot.querySelector('header, [slot="authorFlair"]');
+                const metaSlot = el.shadowRoot.querySelector(
+                    '[part*="author"], [part*="meta"], [class*="author"], header, [slot="authorFlair"]'
+                );
                 if (metaSlot && !metaSlot.querySelector('.reddit-quick-block-btn')) {
                     metaSlot.appendChild(makeButton(username));
                     return;
                 }
             }
 
-            // 3️⃣ Fallback on the post's byline in the light DOM
+            // 3️⃣ Fallback
             const byline = el.querySelector('[data-testid="post_author_link"], [class*="author"], [class*="byline"]');
             const target = byline || el;
             if (!target.querySelector('.reddit-quick-block-btn')) {
@@ -218,27 +215,22 @@
     // --------------------------------------------------------------------------
 
     function processRegularLinks() {
-        // Match relative /user/x or /u/x OR absolute https://www.reddit.com/user/x
         document.querySelectorAll(
             'a[href*="/user/"]:not([data-qb-link]), a[href*="/u/"]:not([data-qb-link])'
         ).forEach(link => {
             link.setAttribute('data-qb-link', '1');
 
             const href = link.getAttribute('href') || '';
-            // Must end in /user/xxx or /u/xxx (with optional trailing slash)
             const m = href.match(/\/u(?:ser)?\/([^/?#]+)/);
             if (!m) return;
             const username = m[1];
             if (!isValid(username)) return;
-
-            // Skip nav / account menus
             if (link.closest('header, nav, #USER_DROPDOWN_ID, [data-testid="subreddit-sidebar"]')) return;
 
-            // Link text should look like a username  ("u/foo" or just "foo")
             const text = link.textContent.trim();
             if (!text || text.length > 50) return;
 
-            if (!alreadyInjected(link, username)) {
+            if (!alreadyInjected(link)) {
                 link.insertAdjacentElement('afterend', makeButton(username));
             }
         });
@@ -254,17 +246,13 @@
         processRegularLinks();
     }
 
-    // MutationObserver for infinite scroll and dynamic content
     const observer = new MutationObserver(processAll);
     observer.observe(document.body, { childList: true, subtree: true });
 
-    // Also observe shadow roots when new shreddit elements appear
-    // (shreddit renders into shadow roots lazily — poll once after short delay)
     setTimeout(processAll, 800);
     setTimeout(processAll, 2000);
 
-    // Run immediately
     processAll();
 
-    console.log('[Reddit Quick Block] v2 loaded');
+    console.log('[Reddit Quick Block] loaded');
 })();

@@ -1,7 +1,7 @@
 // Twitter Quick Block - Content Script
 // Adds a quick block button directly beside tweets
 
-(function() {
+(function () {
   'use strict';
 
   // Function to execute block action
